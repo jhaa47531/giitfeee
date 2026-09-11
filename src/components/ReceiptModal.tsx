@@ -76,12 +76,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ student, transaction
             </div>
             <div>
               <span className="text-slate-400 font-medium block">Course & Semester:</span>
-              <span className="font-semibold text-slate-700">{student.course} — {student.sem}</span>
+              <span className="font-semibold text-slate-700">
+                {student.course} — {transaction?.semester || student.sem}
+                {transaction?.semType ? ` (${transaction.semType} Sem)` : ''}
+              </span>
             </div>
             <div className="text-right">
               <span className="text-slate-400 font-medium block">Payment Method:</span>
               <span className="font-semibold text-slate-700">{paymentMethodDisplay}</span>
             </div>
+            {transaction?.feeCycle && (
+              <div className="col-span-2 bg-blue-50/70 p-2 rounded border border-blue-100 flex items-center justify-between">
+                <span className="text-blue-900 font-medium">Academic Fee Cycle:</span>
+                <span className="font-semibold text-blue-800">
+                  {transaction.feeCycle} {transaction.isAdvance ? '• Advance Payment' : ''}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Fee Itemization Table */}

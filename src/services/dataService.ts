@@ -1,33 +1,18 @@
-import { Student, Transaction } from '../types';
-
-const GEMINI_API_KEY = "AIzaSyC-FlOO_7KmHnWqd83UcKcPdq7961y27t8";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+import { Student, Transaction, FeeCalculationResult } from '../types';
+import {
+  calculateStudentFeeStatus,
+  isValidCourseAndSemester,
+  getCurrentAcademicCycle,
+  getStudentFeeStructure,
+  ALL_COURSES
+} from './feeRules';
 
 // Local storage keys for resilient persistence
 const STORAGE_KEY_STUDENTS = 'giit_students_cache';
 const STORAGE_KEY_TXNS = 'giit_transactions_cache';
 
-// Razorpay Website Verification Test Account Credentials
-export const RAZORPAY_TEST_CREDENTIALS = {
-  username: 'razorpay_test',
-  password: 'GiitTest@2026'
-};
-
-export const RAZORPAY_TEST_STUDENT: Student = {
-  docId: 'doc_razorpay_test',
-  id: 'GIIT-RP-TEST-2026',
-  name: 'Razorpay Verification Student',
-  mobile: 'GiitTest@2026',
-  total: 45000,
-  paid: 30000,
-  course: 'BCA',
-  sem: 'Sem 4',
-  isTestAccount: true
-};
-
-// Seed demo data for instant testing
+// Seed demo data for instant testing - preserving all enrolled students across BCA, MBA, BBA, MCA, B.Tech, B.Com, BA
 const INITIAL_STUDENTS: Student[] = [
-  RAZORPAY_TEST_STUDENT,
   {
     docId: 'doc_1',
     id: 'GIIT-2024-001',
@@ -35,6 +20,8 @@ const INITIAL_STUDENTS: Student[] = [
     mobile: '9876543210',
     total: 45000,
     paid: 30000,
+    annualFee: 30000,
+    installmentAmount: 15000,
     course: 'BCA',
     sem: 'Sem 4'
   },
@@ -45,6 +32,8 @@ const INITIAL_STUDENTS: Student[] = [
     mobile: '9811223344',
     total: 50000,
     paid: 50000,
+    annualFee: 50000,
+    installmentAmount: 25000,
     course: 'MBA',
     sem: 'Sem 2'
   },
@@ -55,6 +44,8 @@ const INITIAL_STUDENTS: Student[] = [
     mobile: '9933445566',
     total: 42000,
     paid: 15000,
+    annualFee: 28000,
+    installmentAmount: 14000,
     course: 'BBA',
     sem: 'Sem 1'
   },
@@ -65,6 +56,8 @@ const INITIAL_STUDENTS: Student[] = [
     mobile: '9712345678',
     total: 48000,
     paid: 24000,
+    annualFee: 48000,
+    installmentAmount: 24000,
     course: 'MCA',
     sem: 'Sem 3'
   },
@@ -75,32 +68,69 @@ const INITIAL_STUDENTS: Student[] = [
     mobile: '9334777278',
     total: 45000,
     paid: 45000,
+    annualFee: 30000,
+    installmentAmount: 15000,
     course: 'BCA',
     sem: 'Sem 6'
+  },
+  // B.Tech (1-8 semesters)
+  {
+    docId: 'doc_6',
+    id: 'GIIT-2024-BT01',
+    name: 'Vikram Malhotra',
+    mobile: '9822334455',
+    total: 70000,
+    paid: 35000,
+    annualFee: 35000,
+    installmentAmount: 17500,
+    course: 'B.Tech',
+    sem: 'Sem 4'
+  },
+  // Case A: Previous Cleared & Advance Paid (₹35,000 Annual Fee)
+  {
+    docId: 'doc_7',
+    id: 'GIIT-2024-006',
+    name: 'Rohan Verma',
+    mobile: '9833445566',
+    total: 35000,
+    paid: 35000,
+    annualFee: 35000,
+    installmentAmount: 17500,
+    advanceFeePaid: 17500,
+    course: 'BCA',
+    sem: 'Sem 2'
+  },
+  // Case B: Previous Pending (₹10,000) + New Semester Fee (₹17,500)
+  {
+    docId: 'doc_8',
+    id: 'GIIT-2024-007',
+    name: 'Sneha Kumari',
+    mobile: '9844556677',
+    total: 35000,
+    paid: 7500,
+    annualFee: 35000,
+    installmentAmount: 17500,
+    previousPendingFee: 10000,
+    course: 'B.Com',
+    sem: 'Sem 3'
+  },
+  // Case C: Previous Cleared BUT New Semester Fee Pending
+  {
+    docId: 'doc_9',
+    id: 'GIIT-2024-008',
+    name: 'Arjun Das',
+    mobile: '9855667788',
+    total: 30000,
+    paid: 15000,
+    annualFee: 30000,
+    installmentAmount: 15000,
+    previousPendingFee: 0,
+    course: 'BA',
+    sem: 'Sem 2'
   }
 ];
 
 const INITIAL_TXNS: Transaction[] = [
-  {
-    docId: 'txn_rp_1',
-    txnId: 'PAY_RP_VERIFY_98214',
-    studentId: 'GIIT-RP-TEST-2026',
-    studentName: 'Razorpay Verification Student',
-    studentDocId: 'doc_razorpay_test',
-    amount: 15000,
-    status: 'done',
-    createdAt: '2025-02-10'
-  },
-  {
-    docId: 'txn_rp_2',
-    txnId: 'PAY_RP_VERIFY_10482',
-    studentId: 'GIIT-RP-TEST-2026',
-    studentName: 'Razorpay Verification Student',
-    studentDocId: 'doc_razorpay_test',
-    amount: 15000,
-    status: 'done',
-    createdAt: '2025-03-01'
-  },
   {
     docId: 'txn_1',
     txnId: 'UPI948291048',
@@ -109,7 +139,10 @@ const INITIAL_TXNS: Transaction[] = [
     studentDocId: 'doc_1',
     amount: 15000,
     status: 'done',
-    createdAt: '2025-01-15'
+    createdAt: '2025-01-15',
+    course: 'BCA',
+    semester: 'Sem 3',
+    semType: 'ODD'
   },
   {
     docId: 'txn_2',
@@ -119,7 +152,10 @@ const INITIAL_TXNS: Transaction[] = [
     studentDocId: 'doc_1',
     amount: 15000,
     status: 'done',
-    createdAt: '2025-02-10'
+    createdAt: '2025-02-10',
+    course: 'BCA',
+    semester: 'Sem 4',
+    semType: 'EVEN'
   },
   {
     docId: 'txn_3',
@@ -129,7 +165,10 @@ const INITIAL_TXNS: Transaction[] = [
     studentDocId: 'doc_3',
     amount: 15000,
     status: 'done',
-    createdAt: '2025-02-18'
+    createdAt: '2025-02-18',
+    course: 'BBA',
+    semester: 'Sem 1',
+    semType: 'ODD'
   },
   {
     docId: 'txn_4',
@@ -139,7 +178,40 @@ const INITIAL_TXNS: Transaction[] = [
     studentDocId: 'doc_4',
     amount: 12000,
     status: 'pending',
-    createdAt: '2025-03-01'
+    createdAt: '2025-03-01',
+    course: 'MCA',
+    semester: 'Sem 3',
+    semType: 'ODD'
+  },
+  {
+    docId: 'txn_5',
+    txnId: 'PAY_BT_194820',
+    studentId: 'GIIT-2024-BT01',
+    studentName: 'Vikram Malhotra',
+    studentDocId: 'doc_6',
+    amount: 35000,
+    status: 'done',
+    createdAt: '2025-02-20',
+    course: 'B.Tech',
+    semester: 'Sem 4',
+    semType: 'EVEN',
+    feeCycle: 'June Even Cycle'
+  },
+  {
+    docId: 'txn_6',
+    txnId: 'ADV_PAY_849201',
+    studentId: 'GIIT-2024-006',
+    studentName: 'Rohan Verma',
+    studentDocId: 'doc_7',
+    amount: 17500,
+    status: 'done',
+    createdAt: '2025-04-15',
+    course: 'BCA',
+    semester: 'Sem 2',
+    semType: 'EVEN',
+    feeCycle: 'April Advance (Even Sem)',
+    isAdvance: true,
+    targetSemester: 'Sem 2'
   }
 ];
 
@@ -148,11 +220,12 @@ function getStoredStudents(): Student[] {
     const raw = localStorage.getItem(STORAGE_KEY_STUDENTS);
     if (raw) {
       const list: Student[] = JSON.parse(raw);
-      if (!list.some(s => s.id === RAZORPAY_TEST_STUDENT.id)) {
-        list.unshift(RAZORPAY_TEST_STUDENT);
-        saveStoredStudents(list);
+      // Clean up any test student accounts from persistent cache
+      const cleaned = list.filter(s => s.id !== 'GIIT-RP-TEST-2026' && !s.isTestAccount);
+      if (cleaned.length !== list.length) {
+        saveStoredStudents(cleaned);
       }
-      return list;
+      return cleaned;
     }
   } catch (e) {
     console.error(e);
@@ -173,11 +246,12 @@ function getStoredTxns(): Transaction[] {
     const raw = localStorage.getItem(STORAGE_KEY_TXNS);
     if (raw) {
       const list: Transaction[] = JSON.parse(raw);
-      if (!list.some(t => t.studentId === RAZORPAY_TEST_STUDENT.id)) {
-        list.unshift(INITIAL_TXNS[0], INITIAL_TXNS[1]);
-        saveStoredTxns(list);
+      // Clean up any test transactions from persistent cache
+      const cleaned = list.filter(t => t.studentId !== 'GIIT-RP-TEST-2026' && !t.docId?.startsWith('txn_rp_'));
+      if (cleaned.length !== list.length) {
+        saveStoredTxns(cleaned);
       }
-      return list;
+      return cleaned;
     }
   } catch (e) {
     console.error(e);
@@ -214,6 +288,10 @@ export const DataService = {
               mobile: data.mobile || '',
               total: Number(data.total) || 0,
               paid: Number(data.paid) || 0,
+              annualFee: data.annualFee ? Number(data.annualFee) : undefined,
+              installmentAmount: data.installmentAmount ? Number(data.installmentAmount) : undefined,
+              previousPendingFee: data.previousPendingFee ? Number(data.previousPendingFee) : 0,
+              advanceFeePaid: data.advanceFeePaid ? Number(data.advanceFeePaid) : 0,
               course: data.course || 'BCA',
               sem: data.sem || 'Sem 1'
             });
@@ -228,26 +306,9 @@ export const DataService = {
     return getStoredStudents();
   },
 
-  loginRazorpayTest(usernameVal: string, passwordVal: string): Student | null {
-    if (
-      usernameVal.trim() === RAZORPAY_TEST_CREDENTIALS.username &&
-      passwordVal.trim() === RAZORPAY_TEST_CREDENTIALS.password
-    ) {
-      const all = getStoredStudents();
-      const existing = all.find(s => s.id === RAZORPAY_TEST_STUDENT.id);
-      return existing || RAZORPAY_TEST_STUDENT;
-    }
-    return null;
-  },
-
   async loginStudent(studentIdVal: string, mobileVal: string): Promise<Student | null> {
     const trimmedId = studentIdVal.trim();
     const trimmedMob = mobileVal.trim();
-
-    // Check dedicated Razorpay test account
-    if (trimmedId === RAZORPAY_TEST_CREDENTIALS.username && trimmedMob === RAZORPAY_TEST_CREDENTIALS.password) {
-      return this.loginRazorpayTest(trimmedId, trimmedMob);
-    }
 
     const db = this.getFirestoreDb();
     if (db) {
@@ -341,11 +402,72 @@ export const DataService = {
   },
 
   /**
-   * Create Razorpay Order via server-side endpoint
+   * Centralized Student Fee Status Calculator
+   * Queries backend API (/api/fees/calculate-status) as the single source of truth,
+   * falling back gracefully to local calculation engine if offline.
+   */
+  async calculateStudentStatus(
+    student: Student,
+    txns?: Transaction[],
+    options?: { asOfDate?: Date; forceCycle?: 'JUNE_EVEN' | 'DECEMBER_ODD' }
+  ): Promise<FeeCalculationResult> {
+    try {
+      const history = txns || (await this.fetchStudentHistory(student.id));
+      const res = await fetch('/api/fees/calculate-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student,
+          transactions: history,
+          options
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.calculation) {
+          return data.calculation;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend fee calculation notice (using local calculation engine):', e);
+    }
+    const fallbackHistory = txns || (await this.fetchStudentHistory(student.id));
+    return calculateStudentFeeStatus(student, fallbackHistory, options);
+  },
+
+  /**
+   * Validate Course & Semester data via backend API route
+   */
+  async validateStudentData(params: {
+    course: string;
+    sem: string;
+    studentId?: string;
+    mobile?: string;
+    total?: number;
+  }): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const res = await fetch('/api/fees/validate-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const data = await res.json();
+      return { valid: false, error: data.error || 'Validation failed' };
+    } catch (e) {
+      return isValidCourseAndSemester(params.course, params.sem);
+    }
+  },
+
+  /**
+   * Create Razorpay Order via server-side endpoint with advance and semester metadata
    */
   async createRazorpayOrder(
     amount: number,
-    student: Student
+    student: Student,
+    extraNotes?: { feeCycle?: string; isAdvance?: boolean; targetSemester?: string }
   ): Promise<{ success: boolean; orderId?: string; amount?: number; currency?: string; keyId?: string; error?: string }> {
     try {
       const res = await fetch('/api/razorpay/create-order', {
@@ -356,7 +478,10 @@ export const DataService = {
           studentId: student.id,
           studentName: student.name,
           course: student.course,
-          sem: student.sem
+          sem: student.sem,
+          feeCycle: extraNotes?.feeCycle,
+          isAdvance: extraNotes?.isAdvance,
+          targetSemester: extraNotes?.targetSemester || student.sem
         })
       });
 
@@ -378,7 +503,23 @@ export const DataService = {
     studentId: string;
     studentDocId: string;
     amount: number;
-  }): Promise<{ success: boolean; alreadyProcessed?: boolean; paymentId?: string; orderId?: string; error?: string }> {
+    course?: string;
+    sem?: string;
+    feeCycle?: string;
+    isAdvance?: boolean;
+    targetSemester?: string;
+  }): Promise<{
+    success: boolean;
+    alreadyProcessed?: boolean;
+    paymentId?: string;
+    orderId?: string;
+    error?: string;
+    course?: string;
+    sem?: string;
+    feeCycle?: string;
+    isAdvance?: boolean;
+    targetSemester?: string;
+  }> {
     try {
       const res = await fetch('/api/razorpay/verify-payment', {
         method: 'POST',
@@ -402,7 +543,15 @@ export const DataService = {
     student: Student,
     amount: number,
     razorpayPaymentId: string,
-    razorpayOrderId: string
+    razorpayOrderId: string,
+    meta?: {
+      course?: string;
+      semester?: string;
+      semType?: 'ODD' | 'EVEN';
+      feeCycle?: string;
+      isAdvance?: boolean;
+      targetSemester?: string;
+    }
   ): Promise<{ success: boolean; alreadyProcessed?: boolean; transaction?: Transaction }> {
     const db = this.getFirestoreDb();
     const firebase = (window as any).firebase;
@@ -423,6 +572,10 @@ export const DataService = {
       return { success: true, alreadyProcessed: true, transaction: existingTxn };
     }
 
+    const currentSem = meta?.semester || student.sem;
+    const semNumber = parseInt(currentSem.replace(/\D/g, '') || '1', 10);
+    const semType: 'ODD' | 'EVEN' = meta?.semType || (semNumber % 2 === 0 ? 'EVEN' : 'ODD');
+
     const newTxn: Transaction = {
       docId: 'txn_' + Date.now(),
       txnId: razorpayPaymentId,
@@ -434,7 +587,13 @@ export const DataService = {
       razorpayPaymentId: razorpayPaymentId,
       razorpayOrderId: razorpayOrderId,
       paymentSource: 'Razorpay Live Gateway',
-      createdAt: new Date().toISOString().split('T')[0]
+      createdAt: new Date().toISOString().split('T')[0],
+      course: meta?.course || student.course,
+      semester: currentSem,
+      semType,
+      feeCycle: meta?.feeCycle || (meta?.isAdvance ? 'Advance Fee Cycle' : 'Standard Semester Fee'),
+      isAdvance: Boolean(meta?.isAdvance),
+      targetSemester: meta?.targetSemester || currentSem
     };
 
     // 2. Check Firestore and update atomically if available
@@ -462,6 +621,12 @@ export const DataService = {
           razorpayOrderId: razorpayOrderId,
           paymentSource: 'Razorpay Live Gateway',
           createdAt: newTxn.createdAt,
+          course: newTxn.course,
+          semester: newTxn.semester,
+          semType: newTxn.semType,
+          feeCycle: newTxn.feeCycle,
+          isAdvance: newTxn.isAdvance,
+          targetSemester: newTxn.targetSemester,
           time: firebase.firestore.FieldValue.serverTimestamp()
         });
         newTxn.docId = ref.id;
@@ -483,6 +648,9 @@ export const DataService = {
     const targetStudent = students.find(s => s.docId === student.docId || s.id === student.id);
     if (targetStudent) {
       targetStudent.paid = (targetStudent.paid || 0) + Number(amount);
+      if (meta?.isAdvance) {
+        targetStudent.advanceFeePaid = (targetStudent.advanceFeePaid || 0) + Number(amount);
+      }
       saveStoredStudents(students);
     }
 
@@ -545,13 +713,35 @@ export const DataService = {
 
   async addStudent(data: Omit<Student, 'docId' | 'paid'>): Promise<Student> {
     const db = this.getFirestoreDb();
+
+    // Check unique student ID constraint
+    const list = getStoredStudents();
+    if (list.some(s => s.id.toLowerCase() === data.id.trim().toLowerCase())) {
+      throw new Error(`A student with Student ID "${data.id}" already exists. Student IDs must be strictly unique.`);
+    }
+
+    // Validate course and semester
+    const val = isValidCourseAndSemester(data.course, data.sem);
+    if (!val.valid) {
+      throw new Error(val.error || 'Invalid course/semester selection.');
+    }
+
+    // Determine annual fee and installment amount
+    const totalAmount = Number(data.total) || 35000;
+    const initialAnnual = data.annualFee && data.annualFee > 0 ? data.annualFee : totalAmount;
+    const installment = Math.round(initialAnnual / 2);
+
     const newStudent: Student = {
       docId: 'doc_' + Date.now(),
-      id: data.id,
-      name: data.name,
-      mobile: data.mobile,
-      total: data.total,
+      id: data.id.trim(),
+      name: data.name.trim(),
+      mobile: data.mobile.trim(),
+      total: totalAmount,
       paid: 0,
+      annualFee: initialAnnual,
+      installmentAmount: installment,
+      previousPendingFee: data.previousPendingFee || 0,
+      advanceFeePaid: 0,
       course: data.course,
       sem: data.sem
     };
@@ -564,6 +754,10 @@ export const DataService = {
           mobile: newStudent.mobile,
           total: newStudent.total,
           paid: 0,
+          annualFee: newStudent.annualFee,
+          installmentAmount: newStudent.installmentAmount,
+          previousPendingFee: newStudent.previousPendingFee,
+          advanceFeePaid: 0,
           course: newStudent.course,
           sem: newStudent.sem
         });
@@ -573,7 +767,6 @@ export const DataService = {
       }
     }
 
-    const list = getStoredStudents();
     list.unshift(newStudent);
     saveStoredStudents(list);
     return newStudent;
@@ -617,37 +810,29 @@ export const DataService = {
     return true;
   },
 
-  // Gemini AI Assistant Call with graceful context fallback
+  // Gemini AI Assistant Call with graceful context fallback via secure server API route
   async callGemini(systemPrompt: string, userMessage: string): Promise<string> {
     try {
-      const response = await fetch(GEMINI_URL, {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: `${systemPrompt}\n\nUser: ${userMessage}` }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.6,
-            maxOutputTokens: 512
-          }
+          systemPrompt,
+          message: userMessage
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`Gemini HTTP ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.text) {
+          return data.text;
+        }
       }
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) return text;
     } catch (err) {
-      console.warn('Gemini API call failed, generating contextual response:', err);
+      console.warn('Gemini API call notice, using contextual response:', err);
     }
 
-    // High quality intelligent response generator
+    // High quality intelligent response generator fallback
     return generateSmartFallbackResponse(systemPrompt, userMessage);
   }
 };

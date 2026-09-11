@@ -6,9 +6,10 @@ Chart.register(ArcElement, Tooltip, Legend, DoughnutController);
 interface StudentChartProps {
   paid: number;
   pending: number;
+  advancePaid?: number;
 }
 
-export const StudentChart: React.FC<StudentChartProps> = ({ paid, pending }) => {
+export const StudentChart: React.FC<StudentChartProps> = ({ paid, pending, advancePaid = 0 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<Chart | null>(null);
 
@@ -22,18 +23,27 @@ export const StudentChart: React.FC<StudentChartProps> = ({ paid, pending }) => 
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
-    const total = paid + pending;
-    const paidPct = total > 0 ? Math.round((paid / total) * 100) : 0;
+    const labels = advancePaid > 0 
+      ? ['Cleared Fee', 'Advance Paid', 'Pending Balance']
+      : ['Cleared Fee', 'Pending Balance'];
+
+    const data = advancePaid > 0
+      ? [paid - advancePaid > 0 ? paid - advancePaid : 0, advancePaid, pending > 0 ? pending : 0]
+      : [paid, pending > 0 ? pending : 0];
+
+    const colors = advancePaid > 0
+      ? ['#059669', '#2563eb', '#e11d48']
+      : ['#059669', '#e11d48'];
 
     chartInstanceRef.current = new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Cleared Fee', 'Pending Balance'],
+        labels,
         datasets: [
           {
-            data: [paid, pending > 0 ? pending : 0],
-            backgroundColor: ['#059669', '#e11d48'],
-            borderColor: ['#ffffff', '#ffffff'],
+            data,
+            backgroundColor: colors,
+            borderColor: ['#ffffff', '#ffffff', '#ffffff'],
             borderWidth: 2,
             hoverOffset: 4
           }

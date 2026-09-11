@@ -35,8 +35,10 @@ export const AdminChart: React.FC<AdminChartProps> = ({ students }) => {
       BCA: { paid: 0, pending: 0 },
       BBA: { paid: 0, pending: 0 },
       'B.Com': { paid: 0, pending: 0 },
+      'B.Tech': { paid: 0, pending: 0 },
+      MCA: { paid: 0, pending: 0 },
       MBA: { paid: 0, pending: 0 },
-      MCA: { paid: 0, pending: 0 }
+      BA: { paid: 0, pending: 0 }
     };
 
     students.forEach((s) => {

@@ -27,8 +27,9 @@ import {
   Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Student, Transaction, ChatMessage, ScreenId } from './types';
-import { DataService, RAZORPAY_TEST_CREDENTIALS } from './services/dataService';
+import { Student, Transaction, ChatMessage, ScreenId, FeeCalculationResult, AcademicCycle, CourseId } from './types';
+import { DataService } from './services/dataService';
+import { COURSE_MAP, getCurrentAcademicCycle } from './services/feeRules';
 import { Header } from './components/Header';
 import { StudentChart } from './components/StudentChart';
 import { AdminChart } from './components/AdminChart';
@@ -40,13 +41,15 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<Student | null>(null);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
 
+  // Academic Cycle & Fee Calculation State
+  const [currentCycle] = useState<AcademicCycle>(getCurrentAcademicCycle());
+  const [currentUserFeeStatus, setCurrentUserFeeStatus] = useState<FeeCalculationResult | null>(null);
+
   // Form Inputs (with exact legacy IDs)
   const [studentIdInput, setStudentIdInput] = useState<string>('');
   const [mobileInput, setMobileInput] = useState<string>('');
   const [adminMobileInput, setAdminMobileInput] = useState<string>('');
   const [adminPasswordInput, setAdminPasswordInput] = useState<string>('');
-  const [razorpayUsernameInput, setRazorpayUsernameInput] = useState<string>('');
-  const [razorpayPasswordInput, setRazorpayPasswordInput] = useState<string>('');
 
   // Razorpay Live Payment States
   const [payAmountInput, setPayAmountInput] = useState<string>('');
@@ -62,7 +65,9 @@ export default function App() {
   const [newIdInput, setNewIdInput] = useState<string>('');
   const [newNameInput, setNewNameInput] = useState<string>('');
   const [newMobileInput, setNewMobileInput] = useState<string>('');
-  const [newTotalInput, setNewTotalInput] = useState<string>('');
+  const [newTotalInput, setNewTotalInput] = useState<string>('35000');
+  const [newAnnualFeeInput, setNewAnnualFeeInput] = useState<string>('35000');
+  const [newPreviousPendingInput, setNewPreviousPendingInput] = useState<string>('0');
   const [newCourseInput, setNewCourseInput] = useState<string>('BCA');
   const [newSemInput, setNewSemInput] = useState<string>('Sem 1');
 
@@ -131,12 +136,25 @@ export default function App() {
     setTransactions(loadedTxns);
   };
 
-  // Sync Student History whenever currentUser changes or transactions change
+  // Sync Student History & calculate fee clearance status whenever currentUser or transactions change
   useEffect(() => {
+    let isMounted = true;
     if (currentUser) {
       const studentTxns = transactions.filter(t => t.studentId === currentUser.id);
       setHistoryListState(studentTxns);
+      DataService.calculateStudentStatus(currentUser, studentTxns)
+        .then(res => {
+          if (isMounted) setCurrentUserFeeStatus(res);
+        })
+        .catch(err => {
+          console.error('Error calculating fee status:', err);
+        });
+    } else {
+      setCurrentUserFeeStatus(null);
     }
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser, transactions]);
 
   // Expose legacy global functions for complete backward compatibility
@@ -146,7 +164,6 @@ export default function App() {
     win.goBack = goBack;
     win.showToast = showToast;
     win.studentLogin = handleStudentLogin;
-    win.razorpayLogin = handleRazorpayLogin;
     win.adminLogin = handleAdminLogin;
     win.openPayment = () => {
       setPaymentSuccessDetails(null);
@@ -186,7 +203,7 @@ export default function App() {
     win.askAdminSuggestion = handleAdminSuggestion;
     win.sendChat = handleSendStudentChat;
     win.sendAdminChat = handleSendAdminChat;
-  }, [currentUser, studentIdInput, mobileInput, adminMobileInput, adminPasswordInput, razorpayUsernameInput, razorpayPasswordInput, payAmountInput, isProcessingPayment, students, transactions]);
+  }, [currentUser, studentIdInput, mobileInput, adminMobileInput, adminPasswordInput, payAmountInput, isProcessingPayment, students, transactions]);
 
   // Scroll chats on new messages
   useEffect(() => {
@@ -197,39 +214,8 @@ export default function App() {
     adminChatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [adminMessages, isAdminChatTyping]);
 
-  // Dedicated Razorpay Verification Login Handler
-  function handleRazorpayLogin(customUser?: string, customPass?: string) {
-    const user = (customUser !== undefined ? customUser : razorpayUsernameInput).trim();
-    const pass = (customPass !== undefined ? customPass : razorpayPasswordInput).trim();
-
-    if (!user || !pass) {
-      showToast('⚠️ Please enter Razorpay test username and password', 'error');
-      return;
-    }
-
-    const testStudent = DataService.loginRazorpayTest(user, pass);
-    if (!testStudent) {
-      showToast('❌ Invalid Razorpay Test Credentials. Use razorpay_test / GiitTest@2026', 'error');
-      return;
-    }
-
-    setCurrentUser(testStudent);
-    setIsAdminLoggedIn(false); // Strictly non-admin
-    showToast(`✅ Welcome, ${testStudent.name}! (Razorpay Verification Mode)`, 'success');
-    showScreen('studentDashboard');
-  }
-
-  // Student Login Handler (Preserves existing login + seamlessly accepts Razorpay test credentials)
+  // Student Login Handler
   async function handleStudentLogin() {
-    // If Razorpay test credentials entered in standard form
-    if (
-      studentIdInput.trim() === RAZORPAY_TEST_CREDENTIALS.username &&
-      mobileInput.trim() === RAZORPAY_TEST_CREDENTIALS.password
-    ) {
-      handleRazorpayLogin(studentIdInput.trim(), mobileInput.trim());
-      return;
-    }
-
     const student = await DataService.loginStudent(studentIdInput, mobileInput);
     if (!student) {
       showToast('❌ Invalid Student ID or Mobile Number', 'error');
@@ -262,8 +248,6 @@ export default function App() {
     setMobileInput('');
     setAdminMobileInput('');
     setAdminPasswordInput('');
-    setRazorpayUsernameInput('');
-    setRazorpayPasswordInput('');
     showToast('Signed out successfully', 'info');
     showScreen('loginScreen');
   };
@@ -325,8 +309,18 @@ export default function App() {
         return;
       }
 
+      const isAdvancePayment = currentUserFeeStatus
+        ? amt > (currentUserFeeStatus.effectiveDueAmount || 0) || currentUserFeeStatus.status === 'ADVANCE_PAID' || currentUserFeeStatus.statusCase === 'CASE_A'
+        : false;
+      const targetSem = currentUserFeeStatus?.semester || currentUser.sem;
+      const cycleName = currentUserFeeStatus?.activeCycle?.cycleName || currentCycle.cycleName;
+
       // 1. Create order on server
-      const orderRes = await DataService.createRazorpayOrder(amt, currentUser);
+      const orderRes = await DataService.createRazorpayOrder(amt, currentUser, {
+        feeCycle: cycleName,
+        isAdvance: isAdvancePayment,
+        targetSemester: targetSem
+      });
 
       if (!orderRes.success || !orderRes.orderId || !orderRes.keyId) {
         setIsProcessingPayment(false);
@@ -340,7 +334,7 @@ export default function App() {
         amount: orderRes.amount,
         currency: orderRes.currency || 'INR',
         name: 'Global Institute of Information & Technology',
-        description: `Tuition Fee Clearance • ${currentUser.name} (${currentUser.id})`,
+        description: `Fee Payment (${targetSem} • ${cycleName}) • ${currentUser.name}`,
         image: 'https://iili.io/B8DynWP.png',
         order_id: orderRes.orderId,
         prefill: {
@@ -351,7 +345,9 @@ export default function App() {
           studentId: currentUser.id,
           studentName: currentUser.name,
           course: currentUser.course,
-          semester: currentUser.sem,
+          semester: targetSem,
+          feeCycle: cycleName,
+          isAdvance: isAdvancePayment ? 'true' : 'false',
           institution: 'GIIT Accounts'
         },
         theme: {
@@ -417,12 +413,23 @@ export default function App() {
         return;
       }
 
+      const isAdvancePayment = currentUserFeeStatus
+        ? amt > (currentUserFeeStatus.effectiveDueAmount || 0) || currentUserFeeStatus.status === 'ADVANCE_PAID' || currentUserFeeStatus.statusCase === 'CASE_A'
+        : false;
+      const targetSem = currentUserFeeStatus?.semester || currentUser.sem;
+      const cycleName = currentUserFeeStatus?.activeCycle?.cycleName || currentCycle.cycleName;
+
       // 2. Record verified transaction and update student's paid fee
       const recordRes = await DataService.recordVerifiedPayment(
         currentUser,
         amt,
         paymentId,
-        orderId
+        orderId,
+        {
+          feeCycle: cycleName,
+          isAdvance: isAdvancePayment,
+          targetSemester: targetSem
+        }
       );
 
       setIsProcessingPayment(false);
@@ -462,29 +469,54 @@ export default function App() {
     const id = newIdInput.trim();
     const name = newNameInput.trim();
     const mob = newMobileInput.trim();
-    const total = Number(newTotalInput);
+    const total = Number(newTotalInput) || 35000;
+    const annual = Number(newAnnualFeeInput) || total;
+    const prevPending = Number(newPreviousPendingInput) || 0;
 
-    if (!id || !name || !mob || !total) {
-      showToast('⚠️ Please complete all required student fields', 'error');
+    if (!id || !name || !mob) {
+      showToast('⚠️ Please complete all required student fields (ID, Name, Mobile)', 'error');
       return;
     }
 
-    await DataService.addStudent({
-      id,
-      name,
-      mobile: mob,
-      total,
+    // Strict validation against course rules & backend checks
+    const valResult = await DataService.validateStudentData({
       course: newCourseInput,
-      sem: newSemInput
+      sem: newSemInput,
+      studentId: id,
+      mobile: mob,
+      total
     });
 
-    setNewIdInput('');
-    setNewNameInput('');
-    setNewMobileInput('');
-    setNewTotalInput('');
-    showToast('✅ Student successfully registered!', 'success');
-    await loadAllData();
-    showScreen('adminDashboard');
+    if (!valResult.valid) {
+      showToast(`❌ ${valResult.error || 'Invalid student data'}`, 'error');
+      return;
+    }
+
+    try {
+      const added = await DataService.addStudent({
+        id,
+        name,
+        mobile: mob,
+        total,
+        annualFee: annual,
+        installmentAmount: Math.round(annual / 2),
+        previousPendingFee: prevPending,
+        course: newCourseInput,
+        sem: newSemInput
+      });
+
+      setNewIdInput('');
+      setNewNameInput('');
+      setNewMobileInput('');
+      setNewTotalInput('35000');
+      setNewAnnualFeeInput('35000');
+      setNewPreviousPendingInput('0');
+      showToast(`✅ Student ${added.name} registered with verified semester fee structure!`, 'success');
+      await loadAllData();
+      showScreen('adminDashboard');
+    } catch (err: any) {
+      showToast(`❌ ${err.message || 'Could not register student'}`, 'error');
+    }
   }
 
   // Edit Paid Fee Handler
@@ -778,152 +810,6 @@ ${context}`;
                 <ShieldCheck className="w-4 h-4 text-slate-600" />
                 <span>Admin & Accounts Officer Login</span>
               </button>
-
-              <div className="relative my-4 text-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200"></div>
-                </div>
-                <span className="relative px-3 bg-white text-[11px] font-semibold text-slate-400 uppercase">
-                  Gateway Verification
-                </span>
-              </div>
-
-              <button
-                id="toRazorpayLoginBtn"
-                onClick={() => {
-                  setRazorpayUsernameInput('');
-                  setRazorpayPasswordInput('');
-                  showScreen('razorpayLoginScreen');
-                }}
-                className="btn btn-secondary btn-3d-secondary depth-btn w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold text-blue-800 bg-blue-50/90 hover:bg-blue-100 border border-blue-200 flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-4 h-4 text-blue-600" />
-                <span>Razorpay Verification Test Login</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* ============================================================ */}
-        {/* SCREEN: RAZORPAY VERIFICATION LOGIN                          */}
-        {/* ============================================================ */}
-        <section
-          id="razorpayLoginScreen"
-          className={`screen ${screen === 'razorpayLoginScreen' ? 'active block' : 'hidden'}`}
-        >
-          <div className="max-w-md mx-auto">
-            <button
-              onClick={() => {
-                setRazorpayUsernameInput('');
-                setRazorpayPasswordInput('');
-                goBack('loginScreen');
-              }}
-              className="back-btn"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Student Login</span>
-            </button>
-
-            <div className="login-box depth-card bg-white p-6 sm:p-8 border border-slate-200 mt-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center mx-auto mb-4 shadow-xs">
-                <CreditCard className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 text-center mb-1">
-                Razorpay Verification Portal
-              </h3>
-              <p className="text-xs text-slate-500 text-center mb-5">
-                Official Gateway Review & Compliance Verification Access
-              </p>
-
-              {/* Verified Credentials Notice & Quick Auto-fill */}
-              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 mb-5 text-xs text-slate-700">
-                <div className="flex items-center justify-between font-bold text-blue-900 mb-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-blue-700" />
-                    Auditor Test Credentials
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRazorpayUsernameInput('razorpay_test');
-                      setRazorpayPasswordInput('GiitTest@2026');
-                      showToast('Test credentials auto-filled', 'info');
-                    }}
-                    className="btn-3d-copy text-[11px] font-semibold px-2.5 py-1 rounded-md bg-white border border-blue-300 text-blue-700 hover:bg-blue-50"
-                  >
-                    Auto-Fill
-                  </button>
-                </div>
-                <div className="font-mono text-[11px] space-y-1 text-slate-700 bg-white/80 p-2.5 rounded-lg border border-blue-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-sans text-[11px]">Username:</span>
-                    <span className="font-bold text-slate-900">razorpay_test</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-sans text-[11px]">Password:</span>
-                    <span className="font-bold text-slate-900">GiitTest@2026</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Username Input */}
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Test Username
-              </label>
-              <div className="input-wrap depth-input rounded-xl flex items-center px-3.5 py-3 mb-4 bg-slate-50 border border-slate-300">
-                <span className="input-icon text-slate-400 mr-2.5">
-                  <UserCheck className="w-4 h-4" />
-                </span>
-                <input
-                  id="razorpayUsername"
-                  type="text"
-                  className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 font-medium focus:outline-none"
-                  placeholder="Username (razorpay_test)"
-                  value={razorpayUsernameInput}
-                  onChange={e => setRazorpayUsernameInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleRazorpayLogin()}
-                />
-              </div>
-
-              {/* Password Input */}
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Test Password
-              </label>
-              <div className="input-wrap depth-input rounded-xl flex items-center px-3.5 py-3 mb-5 bg-slate-50 border border-slate-300">
-                <span className="input-icon text-slate-400 mr-2.5">
-                  <ShieldCheck className="w-4 h-4" />
-                </span>
-                <input
-                  id="razorpayPassword"
-                  type="password"
-                  className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 font-medium focus:outline-none"
-                  placeholder="Password (GiitTest@2026)"
-                  value={razorpayPasswordInput}
-                  onChange={e => setRazorpayPasswordInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleRazorpayLogin()}
-                />
-              </div>
-
-              {/* Action Button */}
-              <button
-                id="loginRazorpayBtn"
-                onClick={() => handleRazorpayLogin()}
-                className="btn btn-primary btn-3d-primary depth-btn w-full py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 mb-4 flex items-center justify-center gap-2"
-              >
-                <span>Login & Access Student Portal</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
-                <div className="flex items-center gap-1.5 font-medium text-emerald-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                  <span>Full access to Student Fees Dashboard & Online Payment</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-500">
-                  <span className="text-slate-400 font-bold ml-1">•</span>
-                  <span>Restricted Access: No administrator or accounts console privileges</span>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -1045,12 +931,6 @@ ${context}`;
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                         Active Enrolled
                       </span>
-                      {currentUser.isTestAccount && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 flex items-center gap-1">
-                          <CreditCard className="w-2.5 h-2.5 text-blue-700" />
-                          Razorpay Verification Mode
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span id="studentCourse" className="badge px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">
@@ -1074,20 +954,95 @@ ${context}`;
                 </button>
               </div>
 
+              {/* Academic Fee Cycle & Advance Clearance Banner */}
+              <div className="space-y-3">
+                {/* Academic Cycle Header Pill */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-medium shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="font-bold tracking-wide">
+                      Academic Cycle: {currentUserFeeStatus?.activeCycle?.cycleName || currentCycle.cycleName}
+                    </span>
+                    <span className="text-slate-400">|</span>
+                    <span className="text-slate-300">
+                      {currentUserFeeStatus?.activeCycle?.semType || currentCycle.semType} Semesters Cycle ({currentUserFeeStatus?.activeCycle?.targetSemesters?.join(', ') || currentCycle.targetSemesters.join(', ')})
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-blue-300 font-mono bg-blue-950/60 px-2.5 py-0.5 rounded border border-blue-800">
+                    Policy: Fee Collected 1 Semester in Advance
+                  </span>
+                </div>
+
+                {/* Case A / Case B / Case C Banner */}
+                {currentUserFeeStatus && (
+                  <div
+                    className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
+                      currentUserFeeStatus.statusCase === 'CASE_A'
+                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                        : currentUserFeeStatus.statusCase === 'CASE_B'
+                        ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                        : 'bg-amber-50/90 border-amber-300 text-amber-950'
+                    }`}
+                  >
+                    <div className="mt-0.5 flex-shrink-0">
+                      {currentUserFeeStatus.statusCase === 'CASE_A' ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+                      ) : currentUserFeeStatus.statusCase === 'CASE_B' ? (
+                        <AlertCircle className="w-5 h-5 text-rose-700" />
+                      ) : (
+                        <Clock className="w-5 h-5 text-amber-700" />
+                      )}
+                    </div>
+                    <div className="flex-1 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                        <span className="font-bold text-sm tracking-tight">
+                          {currentUserFeeStatus.statusLabel}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                            currentUserFeeStatus.statusCase === 'CASE_A'
+                              ? 'bg-emerald-200/80 text-emerald-900 border border-emerald-300'
+                              : currentUserFeeStatus.statusCase === 'CASE_B'
+                              ? 'bg-rose-200/80 text-rose-900 border border-rose-300'
+                              : 'bg-amber-200/80 text-amber-900 border border-amber-300'
+                          }`}
+                        >
+                          {currentUserFeeStatus.statusCase.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="leading-relaxed font-normal opacity-90">
+                        {currentUserFeeStatus.statusDescription}
+                      </p>
+                      {currentUserFeeStatus.statusCase === 'CASE_B' && (
+                        <div className="mt-2 pt-2 border-t border-rose-200 font-mono text-[11px] text-rose-900 flex flex-wrap items-center gap-2">
+                          <span>Previous Pending: ₹{currentUserFeeStatus.previousPendingFee.toLocaleString('en-IN')}</span>
+                          <span>+</span>
+                          <span>New Semester Fee: ₹{currentUserFeeStatus.newSemesterFee.toLocaleString('en-IN')}</span>
+                          <span>=</span>
+                          <span className="font-bold">Total Due: ₹{currentUserFeeStatus.totalDueAmount.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* 3D Fee Overview Grid (Elevated Metric Surfaces) */}
               <div className="fee-grid grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
                 {/* Total Fee Card */}
                 <div className="fee-card fee-total depth-card bg-white p-4 sm:p-5 border border-slate-200 relative overflow-hidden">
                   <div className="flex items-center justify-between text-slate-500 mb-2">
                     <span className="fee-label text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Total Course Fee
+                      Annual Fee & Installment
                     </span>
                     <Building className="w-4 h-4 text-slate-400" />
                   </div>
                   <div className="fee-amount text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                    ₹<span id="totalFees">{studentTotal.toLocaleString('en-IN')}</span>
+                    ₹<span>{(currentUserFeeStatus?.annualFee || studentTotal).toLocaleString('en-IN')}</span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">Academic Year 2025–26</p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Semester Installment: <b className="text-slate-800">₹{(currentUserFeeStatus?.semesterInstallment || Math.round(studentTotal / 2)).toLocaleString('en-IN')}</b> (Annual / 2)
+                  </p>
                 </div>
 
                 {/* Paid Fee Card */}
@@ -1102,23 +1057,27 @@ ${context}`;
                     ₹<span id="paidFees">{studentPaid.toLocaleString('en-IN')}</span>
                   </div>
                   <p className="text-[11px] text-emerald-600/90 font-medium mt-1">
-                    Verified by Accounts ({studentPct}% completed)
+                    {currentUserFeeStatus && currentUserFeeStatus.advanceFeePaid > 0
+                      ? `Includes ₹${currentUserFeeStatus.advanceFeePaid.toLocaleString('en-IN')} advance payment`
+                      : `Verified by Accounts (${studentPct}% completed)`}
                   </p>
                 </div>
 
                 {/* Pending Balance Card */}
                 <div className="fee-card fee-pending depth-card bg-white p-4 sm:p-5 border border-slate-200 relative overflow-hidden">
                   <div className="flex items-center justify-between text-slate-500 mb-2">
-                    <span className="fee-label text-xs font-bold uppercase tracking-wider text-amber-700">
+                    <span className="fee-label text-xs font-bold uppercase tracking-wider text-rose-700">
                       Outstanding Dues
                     </span>
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <AlertCircle className="w-4 h-4 text-rose-600" />
                   </div>
                   <div className="fee-amount text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                    ₹<span id="pendingFees">{studentPending.toLocaleString('en-IN')}</span>
+                    ₹<span id="pendingFees">{(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending).toLocaleString('en-IN')}</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {studentPending > 0 ? 'Due before semester exams' : 'No outstanding balance!'}
+                    {(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending) > 0
+                      ? 'Advance clearance required before semester start'
+                      : 'All semester fees completely cleared!'}
                   </p>
                 </div>
               </div>
@@ -1153,10 +1112,15 @@ ${context}`;
                     </span>
                     <span className="text-[11px] font-semibold text-slate-500">Real-time Ledger</span>
                   </div>
-                  <StudentChart paid={studentPaid} pending={studentPending} />
-                  <div className="grid grid-cols-2 gap-2 text-center pt-2 border-t border-slate-100 text-xs text-slate-600">
+                  <StudentChart
+                    paid={studentPaid}
+                    pending={currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending}
+                    advancePaid={currentUserFeeStatus?.advanceFeePaid || 0}
+                  />
+                  <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-slate-100 text-xs text-slate-600">
                     <div>Cleared: <b className="text-emerald-700">₹{studentPaid.toLocaleString('en-IN')}</b></div>
-                    <div>Remaining: <b className="text-rose-700">₹{studentPending.toLocaleString('en-IN')}</b></div>
+                    <div>Advance: <b className="text-blue-700">₹{(currentUserFeeStatus?.advanceFeePaid || 0).toLocaleString('en-IN')}</b></div>
+                    <div>Dues: <b className="text-rose-700">₹{(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending).toLocaleString('en-IN')}</b></div>
                   </div>
                 </div>
 
@@ -1399,10 +1363,14 @@ ${context}`;
                       <span className="text-slate-500">Course & Semester:</span>
                       <span className="font-semibold text-slate-700">{currentUser?.course} — {currentUser?.sem}</span>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Academic Fee Cycle:</span>
+                      <span className="font-mono text-slate-700">{currentUserFeeStatus?.activeCycle?.cycleName || currentCycle.cycleName}</span>
+                    </div>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                      <span className="font-semibold text-slate-700">Outstanding Fee Due:</span>
+                      <span className="font-semibold text-slate-700">Effective Outstanding Due:</span>
                       <span className="font-bold text-base text-rose-700 font-mono">
-                        ₹{studentPending.toLocaleString('en-IN')}
+                        ₹{(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending).toLocaleString('en-IN')}
                       </span>
                     </div>
                   </div>
@@ -1414,13 +1382,18 @@ ${context}`;
                         <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
                           Fee Payment Amount (₹)
                         </label>
-                        {currentUser && studentPending > 0 && (
+                        {currentUser && (
                           <button
                             type="button"
-                            onClick={() => setPayAmountInput(String(studentPending))}
+                            onClick={() => {
+                              const amt = currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending;
+                              setPayAmountInput(String(amt > 0 ? amt : (currentUserFeeStatus?.semesterInstallment || 17500)));
+                            }}
                             className="text-[11px] text-blue-700 hover:underline font-semibold"
                           >
-                            Pay Full Due (₹{studentPending.toLocaleString('en-IN')})
+                            {(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending) > 0
+                              ? `Pay Full Due (₹${(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending).toLocaleString('en-IN')})`
+                              : `Pay Next Sem Installment (₹${(currentUserFeeStatus?.semesterInstallment || 17500).toLocaleString('en-IN')})`}
                           </button>
                         )}
                       </div>
@@ -1429,7 +1402,7 @@ ${context}`;
                         <input
                           id="payAmount"
                           type="number"
-                          placeholder="e.g. 15000"
+                          placeholder="e.g. 17500"
                           disabled={isProcessingPayment}
                           className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 font-medium focus:outline-none"
                           value={payAmountInput}
@@ -1439,36 +1412,32 @@ ${context}`;
                     </div>
 
                     {/* Quick amount chips */}
-                    {studentPending > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <span className="text-[11px] text-slate-400 self-center">Quick Select:</span>
-                        {studentPending >= 5000 && (
-                          <button
-                            type="button"
-                            onClick={() => setPayAmountInput('5000')}
-                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
-                          >
-                            ₹5,000
-                          </button>
-                        )}
-                        {studentPending >= 10000 && (
-                          <button
-                            type="button"
-                            onClick={() => setPayAmountInput('10000')}
-                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
-                          >
-                            ₹10,000
-                          </button>
-                        )}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className="text-[11px] text-slate-400 self-center">Quick Select:</span>
+                      {(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending) > 0 && (
                         <button
                           type="button"
-                          onClick={() => setPayAmountInput(String(studentPending))}
-                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200"
+                          onClick={() => setPayAmountInput(String(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending))}
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200"
                         >
-                          Full ₹{studentPending.toLocaleString('en-IN')}
+                          Due ₹{(currentUserFeeStatus ? currentUserFeeStatus.effectiveDueAmount : studentPending).toLocaleString('en-IN')}
                         </button>
-                      </div>
-                    )}
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPayAmountInput(String(currentUserFeeStatus?.semesterInstallment || 17500))}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200"
+                      >
+                        Installment ₹{(currentUserFeeStatus?.semesterInstallment || 17500).toLocaleString('en-IN')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayAmountInput(String(currentUserFeeStatus?.annualFee || 35000))}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                      >
+                        Annual ₹{(currentUserFeeStatus?.annualFee || 35000).toLocaleString('en-IN')}
+                      </button>
+                    </div>
 
                     <button
                       id="submitPaymentBtn"
@@ -1835,7 +1804,7 @@ ${context}`;
 
                 {/* Course Filter Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-                  {['ALL', 'BCA', 'BBA', 'B.Com', 'MBA', 'MCA'].map(c => (
+                  {['ALL', 'BCA', 'BBA', 'B.Com', 'BA', 'B.Tech', 'MCA', 'MBA'].map(c => (
                     <button
                       key={c}
                       onClick={() => setSelectedCourseFilter(c)}
@@ -2128,20 +2097,46 @@ ${context}`;
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Total Course Fee (₹)
-                  </label>
-                  <div className="input-wrap depth-input rounded-xl flex items-center px-3.5 py-3 bg-slate-50 border border-slate-300">
-                    <span className="input-icon text-slate-500 font-bold mr-2 text-sm">₹</span>
-                    <input
-                      id="newTotal"
-                      type="number"
-                      placeholder="e.g. 45000"
-                      className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 font-medium focus:outline-none"
-                      value={newTotalInput}
-                      onChange={e => setNewTotalInput(e.target.value)}
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                      Annual Fee (₹)
+                    </label>
+                    <div className="input-wrap depth-input rounded-xl flex items-center px-3.5 py-3 bg-slate-50 border border-slate-300">
+                      <span className="input-icon text-slate-500 font-bold mr-2 text-sm">₹</span>
+                      <input
+                        id="newAnnualFee"
+                        type="number"
+                        placeholder="e.g. 35000"
+                        className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 font-medium focus:outline-none"
+                        value={newAnnualFeeInput}
+                        onChange={e => {
+                          setNewAnnualFeeInput(e.target.value);
+                          setNewTotalInput(e.target.value);
+                        }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Installment: <b className="text-slate-800">₹{Math.round((Number(newAnnualFeeInput) || 35000) / 2).toLocaleString('en-IN')}</b> (Annual / 2)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                      Previous Pending Dues (₹)
+                    </label>
+                    <div className="input-wrap depth-input rounded-xl flex items-center px-3.5 py-3 bg-slate-50 border border-slate-300">
+                      <span className="input-icon text-slate-500 font-bold mr-2 text-sm">₹</span>
+                      <input
+                        id="newPrevPending"
+                        type="number"
+                        placeholder="0"
+                        className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 font-medium focus:outline-none"
+                        value={newPreviousPendingInput}
+                        onChange={e => setNewPreviousPendingInput(e.target.value)}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Carryover unpaid balance from prior semester</p>
                   </div>
                 </div>
 
@@ -2154,20 +2149,29 @@ ${context}`;
                       id="newCourse"
                       className="select-input depth-input w-full p-3 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 font-medium focus:outline-none"
                       value={newCourseInput}
-                      onChange={e => setNewCourseInput(e.target.value)}
+                      onChange={e => {
+                        const selectedCourse = e.target.value;
+                        setNewCourseInput(selectedCourse);
+                        const courseMeta = COURSE_MAP[selectedCourse] || COURSE_MAP['BCA'];
+                        const currentSemNum = parseInt(newSemInput.replace(/\D/g, '')) || 1;
+                        if (currentSemNum > courseMeta.totalSemesters) {
+                          setNewSemInput('Sem 1');
+                        }
+                      }}
                     >
-                      <option value="BCA">BCA</option>
-                      <option value="BBA">BBA</option>
-                      <option value="B.Com">B.Com</option>
-                      <option value="MBA">MBA</option>
-                      <option value="MCA">MCA</option>
-                      <option value="BA">BA</option>
+                      <option value="BCA">BCA (6 Sem • 3 Yrs)</option>
+                      <option value="BBA">BBA (6 Sem • 3 Yrs)</option>
+                      <option value="B.Com">B.Com (6 Sem • 3 Yrs)</option>
+                      <option value="BA">BA (6 Sem • 3 Yrs)</option>
+                      <option value="B.Tech">B.Tech (8 Sem • 4 Yrs)</option>
+                      <option value="MCA">MCA (4 Sem • 2 Yrs)</option>
+                      <option value="MBA">MBA (4 Sem • 2 Yrs)</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Semester
+                      Enrolled Semester
                     </label>
                     <select
                       id="newSem"
@@ -2175,12 +2179,14 @@ ${context}`;
                       value={newSemInput}
                       onChange={e => setNewSemInput(e.target.value)}
                     >
-                      <option value="Sem 1">Sem 1</option>
-                      <option value="Sem 2">Sem 2</option>
-                      <option value="Sem 3">Sem 3</option>
-                      <option value="Sem 4">Sem 4</option>
-                      <option value="Sem 5">Sem 5</option>
-                      <option value="Sem 6">Sem 6</option>
+                      {Array.from(
+                        { length: (COURSE_MAP[newCourseInput] || COURSE_MAP['BCA']).totalSemesters },
+                        (_, idx) => `Sem ${idx + 1}`
+                      ).map(s => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

@@ -2,7 +2,14 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import {
+  calculateStudentFeeStatus,
+  isValidCourseAndSemester,
+  ALL_COURSES,
+  getCurrentAcademicCycle
+} from './src/services/feeRules';
 
 dotenv.config();
 
@@ -10,11 +17,164 @@ dotenv.config();
 const processedPaymentIds = new Set<string>();
 const processedOrderIds = new Set<string>();
 
+// Lazy-initialized Gemini client
+let geminiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI | null {
+  if (!geminiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (key) {
+      geminiClient = new GoogleGenAI({ apiKey: key });
+    }
+  }
+  return geminiClient;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // --------------------------------------------------------------------------
+  // API ROUTE: POST /api/chat
+  // Server-side Gemini AI assistant proxy
+  // --------------------------------------------------------------------------
+  app.post('/api/chat', async (req: Request, res: Response) => {
+    try {
+      const { systemPrompt, message } = req.body;
+      const ai = getGeminiClient();
+      if (!ai) {
+        return res.status(503).json({
+          error: 'GEMINI_API_KEY is not configured on the server.',
+          fallback: true
+        });
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `${systemPrompt || ''}\n\nUser Question: ${message || ''}` }]
+          }
+        ],
+        config: {
+          temperature: 0.6,
+          maxOutputTokens: 512
+        }
+      });
+
+      return res.json({ text: response.text });
+    } catch (err: any) {
+      console.error('Error in /api/chat:', err);
+      return res.status(500).json({
+        error: err.message || 'Gemini generation error',
+        fallback: true
+      });
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // API ROUTE: GET /api/fees/courses
+  // Returns official list of degree courses with semester counts and duration
+  // --------------------------------------------------------------------------
+  app.get('/api/fees/courses', (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      courses: ALL_COURSES
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // API ROUTE: GET /api/fees/current-cycle
+  // Returns current active academic cycle (June Even vs December Odd) & payment dates
+  // --------------------------------------------------------------------------
+  app.get('/api/fees/current-cycle', (_req: Request, res: Response) => {
+    const cycle = getCurrentAcademicCycle();
+    res.json({
+      success: true,
+      ...cycle
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // API ROUTE: POST /api/fees/validate-student
+  // Backend source of truth for course & semester validation
+  // Enforces:
+  // - BCA, BBA, B.Com, BA -> Sem 1–6 only
+  // - B.Tech -> Sem 1–8 only
+  // - MCA, MBA -> Sem 1–4 only
+  // --------------------------------------------------------------------------
+  app.post('/api/fees/validate-student', (req: Request, res: Response) => {
+    const { course, sem, studentId, mobile, total } = req.body;
+
+    if (!course || typeof course !== 'string') {
+      return res.status(400).json({ valid: false, error: 'Course is required.' });
+    }
+
+    if (!sem || typeof sem !== 'string') {
+      return res.status(400).json({ valid: false, error: 'Semester is required.' });
+    }
+
+    const validation = isValidCourseAndSemester(course, sem);
+    if (!validation.valid) {
+      return res.status(400).json(validation);
+    }
+
+    if (studentId && typeof studentId !== 'string') {
+      return res.status(400).json({ valid: false, error: 'Valid Student ID is required.' });
+    }
+
+    if (mobile && (!/^\d{10}$/.test(String(mobile).trim()) && String(mobile) !== 'GiitTest@2026')) {
+      return res.status(400).json({ valid: false, error: 'Mobile number must be a valid 10-digit number.' });
+    }
+
+    if (total !== undefined && (isNaN(Number(total)) || Number(total) <= 0)) {
+      return res.status(400).json({ valid: false, error: 'Fee amount must be greater than zero.' });
+    }
+
+    return res.json({ valid: true });
+  });
+
+  // --------------------------------------------------------------------------
+  // API ROUTE: POST /api/fees/calculate-status
+  // Backend source of truth for student fee calculation, installments & status
+  // --------------------------------------------------------------------------
+  app.post('/api/fees/calculate-status', (req: Request, res: Response) => {
+    try {
+      const { student, transactions, options } = req.body;
+
+      if (!student || !student.id || !student.course || !student.sem) {
+        return res.status(400).json({
+          success: false,
+          error: 'Student object with id, course, and semester is required.'
+        });
+      }
+
+      // Validate course and semester first
+      const val = isValidCourseAndSemester(student.course, student.sem);
+      if (!val.valid) {
+        return res.status(400).json({ success: false, error: val.error });
+      }
+
+      const calculation = calculateStudentFeeStatus(
+        student,
+        Array.isArray(transactions) ? transactions : [],
+        options
+      );
+
+      return res.json({
+        success: true,
+        calculation
+      });
+    } catch (err: any) {
+      console.error('Error in /api/fees/calculate-status:', err);
+      return res.status(500).json({
+        success: false,
+        error: err.message || 'Fee calculation failure on server.'
+      });
+    }
+  });
 
   // --------------------------------------------------------------------------
   // API ROUTE: GET /api/razorpay/config
@@ -35,7 +195,7 @@ async function startServer() {
   // --------------------------------------------------------------------------
   app.post('/api/razorpay/create-order', async (req: Request, res: Response) => {
     try {
-      const { amount, studentId, studentName, course, sem } = req.body;
+      const { amount, studentId, studentName, course, sem, feeCycle, isAdvance, targetSemester } = req.body;
 
       const keyId = process.env.RAZORPAY_KEY_ID;
       const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -86,6 +246,9 @@ async function startServer() {
           studentName: String(studentName || ''),
           course: String(course || ''),
           sem: String(sem || ''),
+          feeCycle: String(feeCycle || ''),
+          isAdvance: isAdvance ? 'true' : 'false',
+          targetSemester: String(targetSemester || sem || ''),
           platform: 'GIIT Fee Portal'
         }
       };
@@ -215,6 +378,11 @@ async function startServer() {
         studentDocId: studentDocId,
         amount: Number(amount),
         status: 'SUCCESS',
+        course: req.body.course,
+        sem: req.body.sem,
+        feeCycle: req.body.feeCycle,
+        isAdvance: Boolean(req.body.isAdvance),
+        targetSemester: req.body.targetSemester,
         message: 'Payment signature verified successfully by banking gateway.'
       });
     } catch (err: any) {
