@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>GIIT Fee Management Portal</title>
+    <meta name="description" content="Professional fee management, payment tracking, and analytics portal for Global Institute of Information & Technology." />
+    <meta property="og:title" content="GIIT Fee Management Portal" />
+    <meta property="og:description" content="Professional fee management, payment tracking, and analytics portal for Global Institute of Information & Technology." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Razorpay Checkout SDK -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <!-- Firebase v8 compat for existing GIIT database -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script>
+      try {
+        const firebaseConfig = {
+          apiKey: "AIzaSyAHJCB4BkkwKOCiVE__aJvndBRiWOZF-4",
+          authDomain: "fee-app-e6265.firebaseapp.com",
+          projectId: "fee-app-e6265"
+        };
+        if (!firebase.apps || !firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        window.db = firebase.firestore();
+      } catch (e) {
+        console.warn("Firebase initialization warning:", e);
+      }
+    </script>
+  </head>
+  <body class="bg-slate-100 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,557 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary: #1d4ed8;
+    --primary-dark: #1e40af;
+    --navy: #0f172a;
+    --navy-surface: #1e293b;
+    --bg-canvas: #f1f5f9;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #f1f5f9;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-heading {
+    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* Subtle Realistic 3D Elevation & Tactile Depth */
+.depth-card {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 
+    0 1px 2px -1px rgba(15, 23, 42, 0.06),
+    0 4px 12px -2px rgba(15, 23, 42, 0.05),
+    0 12px 24px -4px rgba(15, 23, 42, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.depth-card-elevated {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 
+    0 2px 4px -1px rgba(15, 23, 42, 0.08),
+    0 8px 20px -3px rgba(15, 23, 42, 0.07),
+    0 20px 30px -6px rgba(15, 23, 42, 0.05);
+}
+
+/* ============================================================ */
+/* REALISTIC PHYSICAL 3D BUTTON SYSTEM (NO OVERFLOW / INTERNAL BORDER) */
+/* ============================================================ */
+
+/* Base 3D Tactile Button definition */
+.depth-btn, .btn-3d {
+  box-sizing: border-box !important;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  border-style: solid;
+  border-width: 1px;
+  outline: none;
+  transform: translateY(0);
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.12s cubic-bezier(0.4, 0, 0.2, 1), 
+              background-color 0.15s ease, 
+              border-color 0.15s ease;
+  will-change: transform, box-shadow;
+}
+
+/* 1. Primary Blue 3D Button (Student Login, Add Student, Save Student) */
+.btn-3d-primary,
+.btn-primary.depth-btn,
+#loginStudentBtn,
+#addStudentNavBtn,
+#saveStudentBtn {
+  box-sizing: border-box !important;
+  background-color: #1d4ed8;
+  color: #ffffff;
+  border: 1px solid #1e40af !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 3px 0 0 #1e3a8a,
+    0 4px 6px -1px rgba(15, 23, 42, 0.22);
+}
+
+.btn-3d-primary:hover,
+.btn-primary.depth-btn:hover,
+#loginStudentBtn:hover,
+#addStudentNavBtn:hover,
+#saveStudentBtn:hover {
+  background-color: #1e40af;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 4px 0 0 #1e3a8a,
+    0 6px 12px -1px rgba(15, 23, 42, 0.28);
+}
+
+.btn-3d-primary:active,
+.btn-primary.depth-btn:active,
+#loginStudentBtn:active,
+#addStudentNavBtn:active,
+#saveStudentBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.25),
+    0 1px 0 0 #1e3a8a,
+    0 2px 4px rgba(15, 23, 42, 0.15);
+}
+
+/* 2. Success Emerald 3D Button (Pay Now, Submit Payment, Approve) */
+.btn-3d-success,
+.btn-success.depth-btn,
+.btn-approve,
+#openPaymentModalBtn,
+#submitPaymentBtn {
+  box-sizing: border-box !important;
+  background-color: #047857;
+  color: #ffffff;
+  border: 1px solid #065f46 !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 3px 0 0 #064e3b,
+    0 4px 6px -1px rgba(6, 78, 59, 0.25);
+}
+
+.btn-3d-success:hover,
+.btn-success.depth-btn:hover,
+.btn-approve:hover,
+#openPaymentModalBtn:hover,
+#submitPaymentBtn:hover {
+  background-color: #065f46;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 4px 0 0 #064e3b,
+    0 6px 12px -1px rgba(6, 78, 59, 0.32);
+}
+
+.btn-3d-success:active,
+.btn-success.depth-btn:active,
+.btn-approve:active,
+#openPaymentModalBtn:active,
+#submitPaymentBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.25),
+    0 1px 0 0 #064e3b,
+    0 2px 4px rgba(6, 78, 59, 0.18);
+}
+
+/* 3. Dark Navy/Slate 3D Button (Admin Verification, Dark Actions) */
+.btn-3d-dark,
+.btn-dark.depth-btn,
+.btn-danger.depth-btn:not(.btn-reject):not(.btn-delete),
+#adminLoginBtn {
+  box-sizing: border-box !important;
+  background-color: #0f172a;
+  color: #ffffff;
+  border: 1px solid #020617 !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 3px 0 0 #020617,
+    0 4px 6px -1px rgba(15, 23, 42, 0.28);
+}
+
+.btn-3d-dark:hover,
+.btn-dark.depth-btn:hover,
+#adminLoginBtn:hover {
+  background-color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 0 0 #020617,
+    0 6px 12px -1px rgba(15, 23, 42, 0.35);
+}
+
+.btn-3d-dark:active,
+.btn-dark.depth-btn:active,
+#adminLoginBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.35),
+    0 1px 0 0 #020617,
+    0 2px 4px rgba(15, 23, 42, 0.2);
+}
+
+/* 4. Secondary Light Slate 3D Button (Admin Switch, Statement, Receipts) */
+.btn-3d-secondary,
+.btn-secondary.depth-btn,
+#toAdminLoginBtn {
+  box-sizing: border-box !important;
+  background-color: #f8fafc;
+  color: #1e293b;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3px 0 0 #94a3b8,
+    0 4px 6px -1px rgba(15, 23, 42, 0.08);
+}
+
+.btn-3d-secondary:hover,
+.btn-secondary.depth-btn:hover,
+#toAdminLoginBtn:hover {
+  background-color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 4px 0 0 #94a3b8,
+    0 6px 10px -1px rgba(15, 23, 42, 0.12);
+}
+
+.btn-3d-secondary:active,
+.btn-secondary.depth-btn:active,
+#toAdminLoginBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.08),
+    0 1px 0 0 #94a3b8,
+    0 2px 3px rgba(15, 23, 42, 0.06);
+}
+
+/* 5. AI Assistant 3D Buttons (Ask GIIT Assistant, Analytics AI) */
+.btn-3d-ai,
+.btn-ai.depth-btn,
+#openStudentAIBtn,
+#openAdminAIBtn {
+  box-sizing: border-box !important;
+  background-color: #eff6ff;
+  color: #1e3a8a;
+  border: 1px solid #bfdbfe !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3px 0 0 #93c5fd,
+    0 4px 6px -1px rgba(37, 99, 235, 0.14);
+}
+
+.btn-3d-ai:hover,
+.btn-ai.depth-btn:hover,
+#openStudentAIBtn:hover,
+#openAdminAIBtn:hover {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 4px 0 0 #93c5fd,
+    0 6px 10px -1px rgba(37, 99, 235, 0.2);
+}
+
+.btn-3d-ai:active,
+.btn-ai.depth-btn:active,
+#openStudentAIBtn:active,
+#openAdminAIBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(37, 99, 235, 0.15),
+    0 1px 0 0 #93c5fd,
+    0 2px 4px rgba(37, 99, 235, 0.1);
+}
+
+/* 6. Danger / Reject 3D Button (.btn-reject) */
+.btn-3d-danger,
+.btn-reject {
+  box-sizing: border-box !important;
+  background-color: #be123c;
+  color: #ffffff;
+  border: 1px solid #9f1239 !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 2.5px 0 0 #881337,
+    0 3px 6px -1px rgba(190, 18, 60, 0.25);
+}
+
+.btn-3d-danger:hover,
+.btn-reject:hover {
+  background-color: #9f1239;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 3.5px 0 0 #881337,
+    0 5px 8px -1px rgba(190, 18, 60, 0.3);
+}
+
+.btn-3d-danger:active,
+.btn-reject:active {
+  transform: translateY(1.5px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 1px 0 0 #881337,
+    0 2px 3px rgba(190, 18, 60, 0.18);
+}
+
+/* 7. Edit & Credit Paid 3D Button (.btn-edit) */
+.btn-3d-edit,
+.btn-edit {
+  box-sizing: border-box !important;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 2.5px 0 0 #93c5fd,
+    0 3px 5px -1px rgba(37, 99, 235, 0.12);
+}
+
+.btn-3d-edit:hover,
+.btn-edit:hover {
+  background-color: #dbeafe;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3.5px 0 0 #93c5fd,
+    0 4px 7px -1px rgba(37, 99, 235, 0.18);
+}
+
+.btn-3d-edit:active,
+.btn-edit:active {
+  transform: translateY(1.5px);
+  box-shadow: 
+    inset 0 1px 2px rgba(37, 99, 235, 0.15),
+    0 1px 0 0 #93c5fd,
+    0 2px 3px rgba(37, 99, 235, 0.1);
+}
+
+/* 8. Delete Student 3D Button (.btn-delete) */
+.btn-3d-delete,
+.btn-delete {
+  box-sizing: border-box !important;
+  background-color: #fff1f2;
+  color: #be123c;
+  border: 1px solid #fecdd3 !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 2.5px 0 0 #fda4af,
+    0 3px 5px -1px rgba(190, 18, 60, 0.12);
+}
+
+.btn-3d-delete:hover,
+.btn-delete:hover {
+  background-color: #ffe4e6;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3.5px 0 0 #fda4af,
+    0 4px 7px -1px rgba(190, 18, 60, 0.18);
+}
+
+.btn-3d-delete:active,
+.btn-delete:active {
+  transform: translateY(1.5px);
+  box-shadow: 
+    inset 0 1px 2px rgba(190, 18, 60, 0.15),
+    0 1px 0 0 #fda4af,
+    0 2px 3px rgba(190, 18, 60, 0.1);
+}
+
+/* 9. Back Buttons (.back-btn) */
+.back-btn {
+  box-sizing: border-box !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.625rem;
+  background-color: #ffffff;
+  color: #1e40af;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 2.5px 0 0 #94a3b8,
+    0 3px 6px -1px rgba(15, 23, 42, 0.08);
+  margin-bottom: 1rem;
+}
+
+.back-btn:hover {
+  background-color: #f8fafc;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3.5px 0 0 #94a3b8,
+    0 5px 8px -1px rgba(15, 23, 42, 0.12);
+}
+
+.back-btn:active {
+  transform: translateY(1.5px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.08),
+    0 1px 0 0 #94a3b8,
+    0 2px 3px rgba(15, 23, 42, 0.06);
+}
+
+/* 10. Copy UPI Button */
+.btn-3d-copy {
+  box-sizing: border-box !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 2.5px 0 0 #60a5fa,
+    0 3px 5px -1px rgba(37, 99, 235, 0.12);
+}
+
+.btn-3d-copy:hover {
+  background-color: #eff6ff;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3.5px 0 0 #60a5fa,
+    0 4px 7px -1px rgba(37, 99, 235, 0.18);
+}
+
+.btn-3d-copy:active {
+  transform: translateY(1.5px);
+  box-shadow: 
+    inset 0 1px 2px rgba(37, 99, 235, 0.15),
+    0 1px 0 0 #60a5fa,
+    0 2px 3px rgba(37, 99, 235, 0.1);
+}
+
+/* 11. Send Chat Buttons (#sendChatBtn, #sendAdminChatBtn) */
+.btn-3d-send,
+#sendChatBtn {
+  box-sizing: border-box !important;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background-color: #1d4ed8;
+  color: #ffffff;
+  border: 1px solid #1e40af !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 3px 0 0 #1e3a8a,
+    0 4px 6px -1px rgba(15, 23, 42, 0.22);
+}
+
+.btn-3d-send:hover,
+#sendChatBtn:hover {
+  background-color: #1e40af;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 4px 0 0 #1e3a8a,
+    0 6px 8px -1px rgba(15, 23, 42, 0.28);
+}
+
+.btn-3d-send:active,
+#sendChatBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.25),
+    0 1px 0 0 #1e3a8a,
+    0 2px 3px rgba(15, 23, 42, 0.15);
+}
+
+.btn-3d-send-dark,
+#sendAdminChatBtn {
+  box-sizing: border-box !important;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background-color: #0f172a;
+  color: #ffffff;
+  border: 1px solid #020617 !important;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 3px 0 0 #020617,
+    0 4px 6px -1px rgba(15, 23, 42, 0.28);
+}
+
+.btn-3d-send-dark:hover,
+#sendAdminChatBtn:hover {
+  background-color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 0 0 #020617,
+    0 6px 8px -1px rgba(15, 23, 42, 0.35);
+}
+
+.btn-3d-send-dark:active,
+#sendAdminChatBtn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.35),
+    0 1px 0 0 #020617,
+    0 2px 3px rgba(15, 23, 42, 0.2);
+}
+
+/* 12. Suggestion Chips in AI Chat */
+.suggestion-chip {
+  box-sizing: border-box !important;
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 2px 0 0 #cbd5e1,
+    0 2px 4px rgba(15, 23, 42, 0.05);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.suggestion-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 
+    inset 0 1px 0 #ffffff,
+    0 3px 0 0 #94a3b8,
+    0 3px 6px rgba(15, 23, 42, 0.08);
+}
+
+.suggestion-chip:active {
+  transform: translateY(1px);
+  box-shadow: 
+    inset 0 1px 1px rgba(0, 0, 0, 0.1),
+    0 1px 0 0 #94a3b8;
+}
+
+/* Subtle Inset for Inputs */
+.depth-input {
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: all 0.15s ease;
+}
+
+.depth-input:focus {
+  background-color: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 
+    inset 0 1px 2px rgba(15, 23, 42, 0.02),
+    0 0 0 3px rgba(37, 99, 235, 0.15);
+  outline: none;
+}
+
+/* Backward compatibility classes from legacy app */
+.screen {
+  display: none;
+}
+.screen.active {
+  display: block;
+}

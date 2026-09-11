@@ -1,0 +1,8 @@
+{
+  "name": "GIIT Fee Management Portal",
+  "description": "Professional fee management, payment tracking, and analytics portal for Global Institute of Information & Technology.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
