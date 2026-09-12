@@ -18,23 +18,40 @@
     <!-- Razorpay Checkout SDK -->
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
-    <!-- Firebase v8 compat for existing GIIT database -->
+    <!-- Firebase v8 compat for GIIT database -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script>
-      try {
-        const firebaseConfig = {
-          apiKey: "AIzaSyAHJCB4BkkwKOCiVE__aJvndBRiWOZF-4",
-          authDomain: "fee-app-e6265.firebaseapp.com",
-          projectId: "fee-app-e6265"
-        };
-        if (!firebase.apps || !firebase.apps.length) {
-          firebase.initializeApp(firebaseConfig);
+      (async function initFirebase() {
+        try {
+          let apiKey = window.__FIREBASE_API_KEY__ || "";
+          let authDomain = "fee-app-e6265.firebaseapp.com";
+          let projectId = "fee-app-e6265";
+
+          if (!apiKey) {
+            try {
+              const res = await fetch('/api/firebase/config');
+              if (res.ok) {
+                const cfg = await res.json();
+                if (cfg && cfg.apiKey) {
+                  apiKey = cfg.apiKey;
+                  authDomain = cfg.authDomain || authDomain;
+                  projectId = cfg.projectId || projectId;
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (apiKey && typeof firebase !== 'undefined') {
+            if (!firebase.apps || !firebase.apps.length) {
+              firebase.initializeApp({ apiKey, authDomain, projectId });
+            }
+            window.db = firebase.firestore();
+          }
+        } catch (e) {
+          console.warn("Firebase initialization notice:", e);
         }
-        window.db = firebase.firestore();
-      } catch (e) {
-        console.warn("Firebase initialization warning:", e);
-      }
+      })();
     </script>
   </head>
   <body class="bg-slate-100 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
@@ -42,4 +59,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

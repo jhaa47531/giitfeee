@@ -125,7 +125,7 @@ async function startServer() {
       return res.status(400).json({ valid: false, error: 'Valid Student ID is required.' });
     }
 
-    if (mobile && (!/^\d{10}$/.test(String(mobile).trim()) && String(mobile) !== 'GiitTest@2026')) {
+    if (mobile && !/^\d{10}$/.test(String(mobile).trim())) {
       return res.status(400).json({ valid: false, error: 'Mobile number must be a valid 10-digit number.' });
     }
 
@@ -174,6 +174,20 @@ async function startServer() {
         error: err.message || 'Fee calculation failure on server.'
       });
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // API ROUTE: GET /api/firebase/config
+  // Returns Firebase public config when configured in environment
+  // --------------------------------------------------------------------------
+  app.get('/api/firebase/config', (_req: Request, res: Response) => {
+    const apiKey = process.env.FIREBASE_API_KEY || '';
+    res.json({
+      configured: Boolean(apiKey),
+      apiKey,
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN || 'fee-app-e6265.firebaseapp.com',
+      projectId: process.env.FIREBASE_PROJECT_ID || 'fee-app-e6265'
+    });
   });
 
   // --------------------------------------------------------------------------

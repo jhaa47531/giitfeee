@@ -1,4 +1,4 @@
-import { Student, Transaction, FeeCalculationResult, CourseId } from '../types';
+import { Student, Transaction, FeeCalculationResult, CourseId, AcademicCycle } from '../types';
 
 export interface CourseConfig {
   id: CourseId;
@@ -92,14 +92,7 @@ export function getSemesterType(sem: string | number): 'ODD' | 'EVEN' {
  * - 15 April: Advance fee for upcoming Even semester (applicable in June cycle)
  * - 15 October: Advance fee for upcoming Odd semester (applicable in Dec cycle)
  */
-export function getCurrentAcademicCycle(customDate?: Date): {
-  cycle: 'JUNE_EVEN' | 'DECEMBER_ODD';
-  cycleName: string;
-  activeSemType: 'ODD' | 'EVEN';
-  upcomingAdvanceSemType: 'ODD' | 'EVEN';
-  nextPaymentDate: string;
-  nextPaymentPurpose: string;
-} {
+export function getCurrentAcademicCycle(customDate?: Date): AcademicCycle {
   const now = customDate || new Date();
   const month = now.getMonth(); // 0 = Jan, 5 = June, 11 = Dec
   const year = now.getFullYear();
@@ -109,8 +102,10 @@ export function getCurrentAcademicCycle(customDate?: Date): {
     return {
       cycle: 'JUNE_EVEN',
       cycleName: 'June Even Semester Cycle',
-      activeSemType: 'EVEN',
+      semType: 'EVEN',
+      targetSemesters: [2, 4, 6, 8],
       upcomingAdvanceSemType: 'ODD',
+      normalPaymentDeadline: `15 June ${year}`,
       nextPaymentDate: `15 October ${year}`,
       nextPaymentPurpose: 'Advance fee for upcoming Odd Semester (December cycle)'
     };
@@ -120,8 +115,10 @@ export function getCurrentAcademicCycle(customDate?: Date): {
     return {
       cycle: 'DECEMBER_ODD',
       cycleName: 'December Odd Semester Cycle',
-      activeSemType: 'ODD',
+      semType: 'ODD',
+      targetSemesters: [1, 3, 5, 7],
       upcomingAdvanceSemType: 'EVEN',
+      normalPaymentDeadline: `15 December ${year}`,
       nextPaymentDate: `15 April ${nextYear}`,
       nextPaymentPurpose: 'Advance fee for upcoming Even Semester (June cycle)'
     };
@@ -236,6 +233,8 @@ export function calculateStudentFeeStatus(
   let caseType: 'CASE_A' | 'CASE_B' | 'CASE_C' | 'STANDARD' = 'STANDARD';
   let paymentStatus: FeeCalculationResult['paymentStatus'] = 'PENDING';
   let statusMessage = '';
+  let statusLabel = '';
+  let statusDescription = '';
   let isCleared = false;
 
   // Determine Case A, Case B, Case C as required in Sections 8 & 9
@@ -246,12 +245,16 @@ export function calculateStudentFeeStatus(
     // Both previous and current semester fee are covered!
     caseType = 'CASE_A';
     paymentStatus = 'FEE_CLEARED';
+    statusLabel = 'Fee Cleared & Advance Compliant';
+    statusDescription = 'All past dues and current semester fee installments are fully cleared. No outstanding balance is pending for this semester.';
     statusMessage = 'Your Fee is Cleared';
     isCleared = true;
   } else if (!isPreviousCleared && effectiveCurrentSemPending > 0) {
     // CASE B: Previous fee is pending AND new semester fee is applicable
     caseType = 'CASE_B';
     paymentStatus = effectivePaid > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+    statusLabel = 'Previous Pending + New Semester Fee';
+    statusDescription = 'Student has past semester pending dues along with new semester installment fees. Please clear the pending dues to ensure exam clearance.';
     const semLabel = activeCycle === 'JUNE_EVEN' ? 'Even Semester Fee' : 'Odd Semester Fee';
     statusMessage = `Previous Pending Fee: ₹${effectivePreviousPending.toLocaleString('en-IN')} | ${semLabel}: ₹${effectiveCurrentSemPending.toLocaleString('en-IN')} | Total Pending Fee: ₹${totalPending.toLocaleString('en-IN')}`;
     isCleared = false;
@@ -259,6 +262,8 @@ export function calculateStudentFeeStatus(
     // CASE C: Previous fee is completely cleared BUT current/new semester fee is pending
     caseType = 'CASE_C';
     paymentStatus = paidTowardsCurrentSem > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+    statusLabel = 'Previous Cleared — New Semester Fee Due';
+    statusDescription = 'Previous semester dues are completely settled. Only the current semester installment is pending payment.';
     const semLabel = activeCycle === 'JUNE_EVEN' ? 'Even Semester Fee Pending' : 'Odd Semester Fee Pending';
     statusMessage = `${semLabel}: ₹${effectiveCurrentSemPending.toLocaleString('en-IN')}`;
     isCleared = false;
@@ -267,14 +272,20 @@ export function calculateStudentFeeStatus(
     caseType = 'STANDARD';
     if (totalPending === 0) {
       paymentStatus = 'FEE_CLEARED';
+      statusLabel = 'Fee Cleared';
+      statusDescription = 'All applicable semester fees are cleared.';
       statusMessage = 'Your Fee is Cleared';
       isCleared = true;
     } else if (effectivePaid > 0) {
       paymentStatus = 'PARTIALLY_PAID';
+      statusLabel = 'Partially Paid';
+      statusDescription = `An outstanding fee balance of ₹${totalPending.toLocaleString('en-IN')} remains after recent payments.`;
       statusMessage = `Outstanding Balance: ₹${totalPending.toLocaleString('en-IN')} (₹${effectivePaid.toLocaleString('en-IN')} paid)`;
       isCleared = false;
     } else {
       paymentStatus = 'PENDING';
+      statusLabel = 'Fee Due';
+      statusDescription = `Semester installment fee of ₹${totalPending.toLocaleString('en-IN')} is awaiting payment.`;
       statusMessage = `Fee Pending: ₹${totalPending.toLocaleString('en-IN')}`;
       isCleared = false;
     }
@@ -316,8 +327,20 @@ export function calculateStudentFeeStatus(
       isAdvanceCovered,
       caseType
     },
-    nextPaymentDate: cycleInfo.nextPaymentDate,
-    nextPaymentPurpose: cycleInfo.nextPaymentPurpose,
-    isCleared
+    nextPaymentDate: cycleInfo.nextPaymentDate || '',
+    nextPaymentPurpose: cycleInfo.nextPaymentPurpose || '',
+    isCleared,
+
+    // Consistent UI fields for direct access
+    statusCase: caseType,
+    statusLabel,
+    statusDescription,
+    effectiveDueAmount: totalPending,
+    semesterInstallment: installmentAmount,
+    newSemesterFee: effectiveCurrentSemPending,
+    totalDueAmount: totalPending,
+    semester: student.sem,
+    status: paymentStatus,
+    activeCycle: cycleInfo
   };
 }

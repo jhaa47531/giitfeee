@@ -309,10 +309,12 @@ export default function App() {
         return;
       }
 
+      const statusCaseKey = currentUserFeeStatus?.statusCase || currentUserFeeStatus?.breakdown?.caseType || 'STANDARD';
+      const effectiveDue = currentUserFeeStatus?.effectiveDueAmount ?? currentUserFeeStatus?.totalPending ?? 0;
       const isAdvancePayment = currentUserFeeStatus
-        ? amt > (currentUserFeeStatus.effectiveDueAmount || 0) || currentUserFeeStatus.status === 'ADVANCE_PAID' || currentUserFeeStatus.statusCase === 'CASE_A'
+        ? amt > effectiveDue || currentUserFeeStatus.status === 'ADVANCE_PAID' || statusCaseKey === 'CASE_A'
         : false;
-      const targetSem = currentUserFeeStatus?.semester || currentUser.sem;
+      const targetSem = currentUserFeeStatus?.semester || currentUserFeeStatus?.currentSem || currentUser.sem;
       const cycleName = currentUserFeeStatus?.activeCycle?.cycleName || currentCycle.cycleName;
 
       // 1. Create order on server
@@ -413,10 +415,12 @@ export default function App() {
         return;
       }
 
+      const statusCaseKey = currentUserFeeStatus?.statusCase || currentUserFeeStatus?.breakdown?.caseType || 'STANDARD';
+      const effectiveDue = currentUserFeeStatus?.effectiveDueAmount ?? currentUserFeeStatus?.totalPending ?? 0;
       const isAdvancePayment = currentUserFeeStatus
-        ? amt > (currentUserFeeStatus.effectiveDueAmount || 0) || currentUserFeeStatus.status === 'ADVANCE_PAID' || currentUserFeeStatus.statusCase === 'CASE_A'
+        ? amt > effectiveDue || currentUserFeeStatus.status === 'ADVANCE_PAID' || statusCaseKey === 'CASE_A'
         : false;
-      const targetSem = currentUserFeeStatus?.semester || currentUser.sem;
+      const targetSem = currentUserFeeStatus?.semester || currentUserFeeStatus?.currentSem || currentUser.sem;
       const cycleName = currentUserFeeStatus?.activeCycle?.cycleName || currentCycle.cycleName;
 
       // 2. Record verified transaction and update student's paid fee
@@ -974,57 +978,63 @@ ${context}`;
                 </div>
 
                 {/* Case A / Case B / Case C Banner */}
-                {currentUserFeeStatus && (
-                  <div
-                    className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
-                      currentUserFeeStatus.statusCase === 'CASE_A'
-                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                        : currentUserFeeStatus.statusCase === 'CASE_B'
-                        ? 'bg-rose-50/90 border-rose-300 text-rose-950'
-                        : 'bg-amber-50/90 border-amber-300 text-amber-950'
-                    }`}
-                  >
-                    <div className="mt-0.5 flex-shrink-0">
-                      {currentUserFeeStatus.statusCase === 'CASE_A' ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-700" />
-                      ) : currentUserFeeStatus.statusCase === 'CASE_B' ? (
-                        <AlertCircle className="w-5 h-5 text-rose-700" />
-                      ) : (
-                        <Clock className="w-5 h-5 text-amber-700" />
-                      )}
-                    </div>
-                    <div className="flex-1 text-xs">
-                      <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-                        <span className="font-bold text-sm tracking-tight">
-                          {currentUserFeeStatus.statusLabel}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                            currentUserFeeStatus.statusCase === 'CASE_A'
-                              ? 'bg-emerald-200/80 text-emerald-900 border border-emerald-300'
-                              : currentUserFeeStatus.statusCase === 'CASE_B'
-                              ? 'bg-rose-200/80 text-rose-900 border border-rose-300'
-                              : 'bg-amber-200/80 text-amber-900 border border-amber-300'
-                          }`}
-                        >
-                          {currentUserFeeStatus.statusCase.replace('_', ' ')}
-                        </span>
+                {currentUserFeeStatus && (() => {
+                  const statusCaseKey = currentUserFeeStatus.statusCase || currentUserFeeStatus.breakdown?.caseType || 'STANDARD';
+                  const prevPending = currentUserFeeStatus.previousPendingFee ?? currentUserFeeStatus.breakdown?.previousPending ?? 0;
+                  const newSemFee = currentUserFeeStatus.newSemesterFee ?? currentUserFeeStatus.breakdown?.semesterFee ?? 0;
+                  const totalDue = currentUserFeeStatus.totalDueAmount ?? currentUserFeeStatus.totalPending ?? (prevPending + newSemFee);
+                  return (
+                    <div
+                      className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
+                        statusCaseKey === 'CASE_A'
+                          ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                          : statusCaseKey === 'CASE_B'
+                          ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                          : 'bg-amber-50/90 border-amber-300 text-amber-950'
+                      }`}
+                    >
+                      <div className="mt-0.5 flex-shrink-0">
+                        {statusCaseKey === 'CASE_A' ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+                        ) : statusCaseKey === 'CASE_B' ? (
+                          <AlertCircle className="w-5 h-5 text-rose-700" />
+                        ) : (
+                          <Clock className="w-5 h-5 text-amber-700" />
+                        )}
                       </div>
-                      <p className="leading-relaxed font-normal opacity-90">
-                        {currentUserFeeStatus.statusDescription}
-                      </p>
-                      {currentUserFeeStatus.statusCase === 'CASE_B' && (
-                        <div className="mt-2 pt-2 border-t border-rose-200 font-mono text-[11px] text-rose-900 flex flex-wrap items-center gap-2">
-                          <span>Previous Pending: ₹{currentUserFeeStatus.previousPendingFee.toLocaleString('en-IN')}</span>
-                          <span>+</span>
-                          <span>New Semester Fee: ₹{currentUserFeeStatus.newSemesterFee.toLocaleString('en-IN')}</span>
-                          <span>=</span>
-                          <span className="font-bold">Total Due: ₹{currentUserFeeStatus.totalDueAmount.toLocaleString('en-IN')}</span>
+                      <div className="flex-1 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                          <span className="font-bold text-sm tracking-tight">
+                            {currentUserFeeStatus.statusLabel || currentUserFeeStatus.statusMessage || 'Fee Status'}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              statusCaseKey === 'CASE_A'
+                                ? 'bg-emerald-200/80 text-emerald-900 border border-emerald-300'
+                                : statusCaseKey === 'CASE_B'
+                                ? 'bg-rose-200/80 text-rose-900 border border-rose-300'
+                                : 'bg-amber-200/80 text-amber-900 border border-amber-300'
+                            }`}
+                          >
+                            {statusCaseKey.replace('_', ' ')}
+                          </span>
                         </div>
-                      )}
+                        <p className="leading-relaxed font-normal opacity-90">
+                          {currentUserFeeStatus.statusDescription || currentUserFeeStatus.statusMessage}
+                        </p>
+                        {statusCaseKey === 'CASE_B' && (
+                          <div className="mt-2 pt-2 border-t border-rose-200 font-mono text-[11px] text-rose-900 flex flex-wrap items-center gap-2">
+                            <span>Previous Pending: ₹{prevPending.toLocaleString('en-IN')}</span>
+                            <span>+</span>
+                            <span>New Semester Fee: ₹{newSemFee.toLocaleString('en-IN')}</span>
+                            <span>=</span>
+                            <span className="font-bold">Total Due: ₹{totalDue.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* 3D Fee Overview Grid (Elevated Metric Surfaces) */}

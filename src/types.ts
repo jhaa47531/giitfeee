@@ -73,6 +73,18 @@ export interface FeeCalculationResult {
   nextPaymentDate: string;
   nextPaymentPurpose: string;
   isCleared: boolean;
+
+  // Consistent UI-facing fields for direct access
+  statusCase: 'CASE_A' | 'CASE_B' | 'CASE_C' | 'STANDARD';
+  statusLabel: string;
+  statusDescription: string;
+  effectiveDueAmount: number;
+  semesterInstallment: number;
+  newSemesterFee: number;
+  totalDueAmount: number;
+  semester: string;
+  status: FeeStatus;
+  activeCycle: AcademicCycle;
 }
 
 export interface AcademicCycle {
